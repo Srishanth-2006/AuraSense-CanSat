@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CanSat Air Quality Dashboard</title>
+    <style>
+        body { font-family: Arial; text-align: center; background: linear-gradient(to bottom, #e0f7fa, #ffffff); color: #333; margin: 0; padding: 20px; }
+        h1 { color: #007BFF; font-size: 2.5em; margin-bottom: 20px; }
+        .container { display: flex; flex-wrap: wrap; justify-content: center; gap: 20px; }
+        .gauge { width: 280px; background: white; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 15px; transition: transform 0.3s; }
+        .gauge:hover { transform: scale(1.05); }
+        .state { font-size: 1.8em; font-weight: bold; margin: 10px 0; }
+        .healthy { color: #28a745; }
+        .moderate { color: #ffc107; }
+        .unhealthy { color: #dc3545; }
+        .aqi-sentence { font-size: 1em; color: #6c757d; margin-top: 5px; }
+        .ai-analysis { width: 80%; max-width: 600px; background: #f8f9fa; border-radius: 15px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); padding: 20px; margin: 20px auto; }
+        .ai-icon { font-size: 2em; margin-bottom: 10px; }
+        .alert { color: #dc3545; font-weight: bold; font-size: 1.2em; margin: 10px; }
+        canvas { margin: 10px 0; }
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>CanSat Air Quality Dashboard</h1>
+    <div class="container">
+        <div class="gauge">
+            <h3>Temperature (°C)</h3>
+            <canvas id="tempGauge"></canvas>
+        </div>
+        <div class="gauge">
+            <h3>Humidity (%)</h3>
+            <canvas id="humidGauge"></canvas>
+        </div>
+        <div class="gauge">
+            <h3>Air Quality State</h3>
+            <p id="stateText" class="state"></p>
+            <p id="aqiSentence" class="aqi-sentence"></p>
+        </div>
+        <div class="gauge">
+            <h3>Ozone (ppb)</h3>
+            <p id="ozone"></p>
+        </div>
+        <div class="gauge">
+            <h3>Air Quality (raw)</h3>
+            <p id="aq"></p>
+        </div>
+        <div class="gauge">
+            <h3>RSSI (dBm)</h3>
+            <p id="rssi"></p>
+        </div>
+        <div class="gauge">
+            <h3>State</h3>
+            <p id="state"></p>
+        </div>
+    </div>
+    <div id="alert" class="alert"></div>
+    <div class="ai-analysis">
+        <div class="ai-icon">🤖</div>
+        <h3>AI Analysis</h3>
+        <p id="aiInsight"></p>
+    </div>
+    <script>
+        function updateDashboard() {
+            fetch('/data')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('ozone').innerText = data.ozone_val;
+                    document.getElementById('aq').innerText = data.aq_val;
+                    document.getElementById('rssi').innerText = data.rssi;
+                    document.getElementById('state').innerText = 
+                        data.state == 0 ? 'Normal' : data.state == 1 ? 'High Humidity' : 'Pollution Event';
+                    updateGauge(tempGauge, data.temp, 0, 50, 'Temperature');
+                    updateGauge(humidGauge, data.humid, 0, 100, 'Humidity');
+                    const aqi = data.aqi;
+                    let stateClass = 'healthy';
+                    let stateText = 'Healthy';
+                    let gaugeColor = '#28a745'; // Green
+                    let sentence = 'AQI ' + aqi + ': Good air quality - enjoy outdoor activities!';
+                    if (aqi > 50 && aqi <= 100) {
+                        stateClass = 'moderate';
+                        stateText = 'Moderate';
+                        gaugeColor = '#ffc107'; // Orange
+                        sentence = 'AQI ' + aqi + ': Acceptable air quality - fine for most people, but monitor if sensitive.';
+                    } else if (aqi > 100) {
+                        stateClass = 'unhealthy';
+                        stateText = 'Unhealthy';
+                        gaugeColor = '#dc3545'; // Red
+                        sentence = 'AQI ' + aqi + ': Unhealthy - sensitive groups should limit outdoor activity; everyone may experience effects.';
+                    }
+                    document.getElementById('stateText').innerText = stateText;
+                    document.getElementById('stateText').className = 'state ' + stateClass;
+                    document.getElementById('aqiSentence').innerText = sentence;
+                    updateGauge(aqiGauge, aqi, 0, 200, 'AQI', gaugeColor);
+                    if (aqi > 100) {
+                        document.getElementById('alert').innerText = 'High Pollution Alert!';
+                    } else {
+                        document.getElementById('alert').innerText = '';
+                    }
+
+                    // AI Analysis
+                    let insight = 'AI Insight: Air quality is stable. No immediate concerns.';
+                    if (data.aqi > 100) {
+                        insight = 'AI Insight: High pollution detected due to elevated ozone levels. Recommend staying indoors and using air purifiers.';
+                    } else if (data.humid > 75) {
+                        insight = 'AI Insight: High humidity may exacerbate pollution effects. Monitor for mold risks and ventilate spaces.';
+                    }
+                    document.getElementById('aiInsight').innerText = insight;
+                });
+        }
+        function updateGauge(chart, value, min, max, label, color = '#FFCE56') {
+            chart.data.datasets[0].data = [value, max - value];
+            chart.data.labels = [label, ''];
+            chart.data.datasets[0].backgroundColor = [color, '#DDDDDD'];
+            chart.update();
+        }
+        const tempGauge = new Chart(document.getElementById('tempGauge'), {
+            type: 'doughnut',
+            data: { labels: ['Temperature', ''], datasets: [{ data: [0, 50], backgroundColor: ['#FF6384', '#DDDDDD'] }] },
+            options: { circumference: 180, rotation: -90, cutout: '70%' }
+        });
+        const humidGauge = new Chart(document.getElementById('humidGauge'), {
+            type: 'doughnut',
+            data: { labels: ['Humidity', ''], datasets: [{ data: [0, 100], backgroundColor: ['#36A2EB', '#DDDDDD'] }] },
+            options: { circumference: 180, rotation: -90, cutout: '70%' }
+        });
+        const aqiGauge = new Chart(document.getElementById('aqiGauge'), {
+            type: 'doughnut',
+            data: { labels: ['AQI', ''], datasets: [{ data: [0, 200], backgroundColor: ['#FFCE56', '#DDDDDD'] }] },
+            options: { circumference: 180, rotation: -90, cutout: '70%' }
+        });
+        setInterval(updateDashboard, 2000);
+    </script>
+</body>
+</html>
